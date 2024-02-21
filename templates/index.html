@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estas Mauillado?</title>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+</head>
+
+<body>
+    <h1 class="mt-5 text-center">Detector de maquillaje</h1>
+    <h4 style="text-align: center;">
+        Resultado de la predicción: <b id="prediction-result">
+            Sin Imagen
+        </b>
+    </h4>
+    <div style="display: flex; justify-content: space-around;">
+        <!-- Sección para subir archivo -->
+        <div style="width: 45%;">
+            <h2 style="text-align: center;">Subir Foto</h2>
+            <div style="display: flex; justify-content: center; background-color: black; width: 100%; height: 50vh;" >
+                <img id="previewImage" src="https://support.discord.com/hc/user_images/5O_1di3yc-0yQiCpsQ576w.png" alt="" style="height: 100%;">
+            </div>
+            <form id="upload-form" enctype="multipart/form-data" style="display: flex; flex-direction: column; justify-content: space-around; height: 25%;align-items: center;">
+                <div>
+                    <input type="file" name="file" accept=".jpg, .jpeg, .png" class="form-control">
+                </div>
+                <div>
+                    <input type="button" value="Subir y Predecir" onclick="uploadFile()" class="btn btn-primary">
+                </div>
+            </form>
+        </div>
+        <!-- Sección para la cámara -->
+        <div style="width: 45%;">
+            <h2 class="text-center">Vista en vivo</h2>
+
+            <div class="text-center pb-2">
+                <button onclick="startCamera()" class="btn btn-success">Iniciar Cámara</button>
+                <button onclick="stopCamera()" class="btn btn-danger">Detener Cámara</button>
+            </div>
+            <div style="display: flex; justify-content: center; background-color: black; height: 50vh;">
+                <img id="noCamera" src="https://i.redd.it/d1imp3t00zu71.jpg" alt="" style="height: 100%;">
+                <video id="camera" style="height: 0%; width: auto;"  autoplay></video>
+            </div>
+            <script>
+                var video;
+                var isCameraActive = false;
+
+                function startCamera() {
+                    var fileInput = document.querySelector('input[type="file"]');
+                    fileInput.value = "";
+                    const previewImage = document.getElementById('previewImage');
+                    previewImage.src = "https://support.discord.com/hc/user_images/5O_1di3yc-0yQiCpsQ576w.png";
+                    const image = document.getElementById('noCamera');
+                    
+
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function (stream) {
+                            video = document.getElementById('camera');
+                            video.srcObject = stream;
+                            image.style="height: 0%;";
+                            video.style = "height:100%";
+                            video.play();
+
+                            isCameraActive = true;
+
+                            var predictionResult = document.getElementById('prediction-result');
+
+                            var canvas = document.createElement('canvas');
+                            var context = canvas.getContext('2d');
+
+                            // Función para preprocesar la imagen y realizar la predicción
+                            function predict() {
+                                // Verificar si la cámara sigue activa
+                                if (!isCameraActive) {
+                                    return;
+                                }
+
+                                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                                // Obtener los datos binarios de la imagen
+                                canvas.toBlob(function (blob) {
+                                    // Crear un objeto FormData para enviar los datos
+                                    var formData = new FormData();
+                                    formData.append('file', blob, 'frame.jpg');
+
+                                    // Enviar la imagen al servidor
+                                    $.ajax({
+                                        type: 'POST',
+                                        url: '/upload', // Ruta del servidor para la predicción
+                                        data: formData,
+                                        processData: false,
+                                        contentType: false,
+                                        success: function (response) {
+                                            console.log(response);
+                                            predictionResult.innerHTML = response.prediction;
+
+                                            // Agregar un retraso de 1 segundo (1000 milisegundos) antes de la próxima predicción
+                                            setTimeout(function () {
+                                                requestAnimationFrame(predict);
+                                            }, 1000);
+                                        },
+                                        error: function (error) {
+                                            console.error(error);
+                                        }
+                                    });
+                                }, 'image/jpeg');
+                            }
+
+                            // Iniciar la predicción en cada frame
+                            requestAnimationFrame(predict);
+                        })
+                        .catch(function (error) {
+                            console.error(error);
+                        });
+                }
+
+                function stopCamera() {
+                    // Detener la transmisión de video
+                    if (video && video.srcObject) {
+                        var tracks = video.srcObject.getTracks();
+                        tracks.forEach(track => track.stop());
+                        isCameraActive = false;
+                        video = document.getElementById('camera');
+                        video.src = "";
+                        video.style = "height: 0%;";
+                        const image = document.getElementById('noCamera');
+                        image.style="height: 100%;";
+                        $("#prediction-result").html('Sin imagen'); // Limpiar la predicción al detener la cámara
+                    }
+                }
+
+                function uploadFile() {
+                    var fileInput = document.querySelector('input[type="file"]');
+                    var file = fileInput.files[0];
+
+                    if (file) {
+                        var formData = new FormData();
+                        formData.append('file', file);
+
+                        // Enviar la imagen al servidor
+                        $.ajax({
+                            type: 'POST',
+                            url: '/upload', // Ruta del servidor para la predicción
+                            data: formData,
+                            processData: false,
+                            contentType: false,
+                            success: function (response) {
+                                console.log(response);
+                                $("#prediction-result").html(response.prediction);
+                            },
+                            error: function (error) {
+                                console.error(error);
+                            }
+                        });
+                    } else {
+                        console.log('Seleccione un archivo antes de subir.');
+                    }
+                }
+            </script>
+
+            <script>
+                const fileInput =  document.querySelector('input[type="file"]');
+                const previewImage = document.getElementById('previewImage');
+
+                fileInput.addEventListener('change', function (event) {
+                    const file = this.files[0];
+                    const reader = new FileReader();
+                    stopCamera();
+
+                    reader.onload = function (e) {
+                        previewImage.src = e.target.result;
+                        
+                    }
+
+                    reader.readAsDataURL(file);
+                });
+            </script>
+        </div>
+    </div>
+
+
+</body>
+
+</html>
